@@ -1,6 +1,10 @@
 #!/bin/bash
 set -euo pipefail
 
+# Claude Desktop for Linux - Universal Build Script
+# Supports all major Linux distributions with automatic package manager detection
+# Compatible with: Fedora, Debian, Ubuntu, Arch, openSUSE, Alpine, and derivatives
+
 # --- Architecture Detection ---
 echo -e "\033[1;36m--- Architecture Detection ---\033[0m"
 echo "⚙️ Detecting system architecture..."
@@ -75,14 +79,29 @@ fi # End of if [ -d "$ORIGINAL_HOME/.nvm" ] check
 
 echo "System Information:"
 echo "Distribution: $(grep "PRETTY_NAME" /etc/os-release | cut -d'"' -f2)"
-
+# Detect package manager for information display
+if command -v dnf &> /dev/null; then
+    echo "Package Manager: dnf"
+elif command -v yum &> /dev/null; then
+    echo "Package Manager: yum"
+elif command -v apt &> /dev/null; then
+    echo "Package Manager: apt"
+elif command -v zypper &> /dev/null; then
+    echo "Package Manager: zypper"
+elif command -v pacman &> /dev/null; then
+    echo "Package Manager: pacman"
+elif command -v apk &> /dev/null; then
+    echo "Package Manager: apk"
+else
+    echo "Package Manager: unknown (manual dependency installation required)"
+fi
 echo "Target Architecture: $ARCHITECTURE" 
 PACKAGE_NAME="claude-desktop"
 MAINTAINER="Claude Desktop Linux Maintainers"
 DESCRIPTION="Claude Desktop for Linux"
 PROJECT_ROOT="$(pwd)" WORK_DIR="$PROJECT_ROOT/build" APP_STAGING_DIR="$WORK_DIR/electron-app" VERSION="" 
 echo -e "\033[1;36m--- Argument Parsing ---\033[0m"
-BUILD_FORMAT="deb"    CLEANUP_ACTION="yes"  TEST_FLAGS_MODE=false
+BUILD_FORMAT="appimage"    CLEANUP_ACTION="yes"  TEST_FLAGS_MODE=false
 while [[ $# -gt 0 ]]; do
     key="$1"
     case $key in
@@ -101,8 +120,8 @@ while [[ $# -gt 0 ]]; do
         shift # past argument
         ;;
         -h|--help)
-        echo "Usage: $0 [--build deb|appimage] [--clean yes|no] [--test-flags]"
-        echo "  --build: Specify the build format (deb or appimage). Default: deb"
+        echo "Usage: $0 [--build deb|rpm|appimage] [--clean yes|no] [--test-flags]"
+        echo "  --build: Specify the build format (deb, rpm, or appimage). Default: deb"
         echo "  --clean: Specify whether to clean intermediate build files (yes or no). Default: yes"
         echo "  --test-flags: Parse flags, print results, and exit without building."
         exit 0
@@ -116,8 +135,8 @@ done
 
 # Validate arguments
 BUILD_FORMAT=$(echo "$BUILD_FORMAT" | tr '[:upper:]' '[:lower:]') CLEANUP_ACTION=$(echo "$CLEANUP_ACTION" | tr '[:upper:]' '[:lower:]')
-if [[ "$BUILD_FORMAT" != "deb" && "$BUILD_FORMAT" != "appimage" ]]; then
-    echo "❌ Invalid build format specified: '$BUILD_FORMAT'. Must be 'deb' or 'appimage'." >&2
+if [[ "$BUILD_FORMAT" != "appimage" ]]; then
+    echo "❌ Invalid build format specified: '$BUILD_FORMAT'. Must be 'appimage'." >&2
     exit 1
 fi
 if [[ "$CLEANUP_ACTION" != "yes" && "$CLEANUP_ACTION" != "no" ]]; then
@@ -146,6 +165,17 @@ fi
 
 
 check_command() {
+    # Special handling for 7z - check for 7z, 7za, or 7zr
+    if [ "$1" = "7z" ]; then
+        if command -v 7z &> /dev/null || command -v 7za &> /dev/null || command -v 7zr &> /dev/null; then
+            echo "✓ 7-zip found (7z/7za/7zr)"
+            return 0
+        else
+            echo "❌ 7-zip not found (7z/7za/7zr)"
+            return 1
+        fi
+    fi
+    
     if ! command -v "$1" &> /dev/null; then
         echo "❌ $1 not found"
         return 1
@@ -156,25 +186,28 @@ check_command() {
 }
 
 echo "Checking dependencies..."
+# These are the commands we need, regardless of distribution
+# The actual package names will be mapped based on the distribution
 DEPS_TO_INSTALL=""
 COMMON_DEPS="7z wget wrestool icotool convert"
-DEB_DEPS=""
 APPIMAGE_DEPS="" 
-ALL_DEPS_TO_CHECK="$COMMON_DEPS"
-if [ "$BUILD_FORMAT" = "deb" ]; then
-    ALL_DEPS_TO_CHECK="$ALL_DEPS_TO_CHECK $DEB_DEPS"
-elif [ "$BUILD_FORMAT" = "appimage" ]; then
-    ALL_DEPS_TO_CHECK="$ALL_DEPS_TO_CHECK $APPIMAGE_DEPS"
-fi
+ALL_DEPS_TO_CHECK="$COMMON_DEPS $APPIMAGE_DEPS"
+
 
 for cmd in $ALL_DEPS_TO_CHECK; do
     if ! check_command "$cmd"; then
         case "$cmd" in
-            "p7zip") DEPS_TO_INSTALL="$DEPS_TO_INSTALL p7zip-full" ;;
+            "7z") 
+                # Different package names for 7-zip across distributions
+                if command -v dnf &> /dev/null || command -v yum &> /dev/null; then
+                    DEPS_TO_INSTALL="$DEPS_TO_INSTALL p7zip p7zip-plugins"
+                else
+                    DEPS_TO_INSTALL="$DEPS_TO_INSTALL p7zip-full"
+                fi
+                ;;
             "wget") DEPS_TO_INSTALL="$DEPS_TO_INSTALL wget" ;;
             "wrestool"|"icotool") DEPS_TO_INSTALL="$DEPS_TO_INSTALL icoutils" ;;
             "convert") DEPS_TO_INSTALL="$DEPS_TO_INSTALL imagemagick" ;;
-            
         esac
     fi
 done
@@ -186,16 +219,21 @@ if [ -n "$DEPS_TO_INSTALL" ]; then
         echo "❌ Failed to validate sudo credentials. Please ensure you can run sudo."
         exit 1
     fi
-        # Attempt to install using dnf for Fedora/RHEL-based systems
+        # Attempt to install using package managers in order of preference
     if command -v dnf &> /dev/null; then
-        echo "Attempting to install dependencies using dnf..."
+        echo "Attempting to install dependencies using dnf (Fedora/RHEL/Rocky/AlmaLinux)..."
         if ! sudo dnf install -y $DEPS_TO_INSTALL; then
             echo "❌ Failed to install dependencies using 'sudo dnf install'."
             exit 1
         fi
-    # Fallback to apt for Debian/Ubuntu-based systems
+    elif command -v yum &> /dev/null; then
+        echo "Attempting to install dependencies using yum (older RHEL/CentOS)..."
+        if ! sudo yum install -y $DEPS_TO_INSTALL; then
+            echo "❌ Failed to install dependencies using 'sudo yum install'."
+            exit 1
+        fi
     elif command -v apt &> /dev/null; then
-        echo "Attempting to install dependencies using apt..."
+        echo "Attempting to install dependencies using apt (Debian/Ubuntu/Mint)..."
         if ! sudo apt update; then
             echo "❌ Failed to run 'sudo apt update'."
             exit 1
@@ -206,8 +244,65 @@ if [ -n "$DEPS_TO_INSTALL" ]; then
             echo "❌ Failed to install dependencies using 'sudo apt install'."
             exit 1
         fi
+    elif command -v zypper &> /dev/null; then
+        echo "Attempting to install dependencies using zypper (openSUSE/SUSE)..."
+        # Map package names for openSUSE
+        SUSE_DEPS=""
+        for dep in $DEPS_TO_INSTALL; do
+            case "$dep" in
+                "p7zip-full"|"p7zip") SUSE_DEPS="$SUSE_DEPS p7zip-full" ;;
+                "p7zip-plugins") ;; # Not needed on SUSE
+                "icoutils") SUSE_DEPS="$SUSE_DEPS icoutils" ;;
+                "imagemagick") SUSE_DEPS="$SUSE_DEPS ImageMagick" ;;
+                "wget") SUSE_DEPS="$SUSE_DEPS wget" ;;
+                *) SUSE_DEPS="$SUSE_DEPS $dep" ;;
+            esac
+        done
+        # shellcheck disable=SC2086
+        if ! sudo zypper install -y $SUSE_DEPS; then
+            echo "❌ Failed to install dependencies using 'sudo zypper install'."
+            exit 1
+        fi
+    elif command -v pacman &> /dev/null; then
+        echo "Attempting to install dependencies using pacman (Arch/Manjaro)..."
+        # Map package names for Arch
+        ARCH_DEPS=""
+        for dep in $DEPS_TO_INSTALL; do
+            case "$dep" in
+                "p7zip-full") ARCH_DEPS="$ARCH_DEPS p7zip" ;;
+                "icoutils") ARCH_DEPS="$ARCH_DEPS icoutils" ;;
+                "imagemagick") ARCH_DEPS="$ARCH_DEPS imagemagick" ;;
+                "wget") ARCH_DEPS="$ARCH_DEPS wget" ;;
+                *) ARCH_DEPS="$ARCH_DEPS $dep" ;;
+            esac
+        done
+        # shellcheck disable=SC2086
+        if ! sudo pacman -S --noconfirm $ARCH_DEPS; then
+            echo "❌ Failed to install dependencies using 'sudo pacman -S'."
+            exit 1
+        fi
+    elif command -v apk &> /dev/null; then
+        echo "Attempting to install dependencies using apk (Alpine)..."
+        # Map package names for Alpine
+        ALPINE_DEPS=""
+        for dep in $DEPS_TO_INSTALL; do
+            case "$dep" in
+                "p7zip-full") ALPINE_DEPS="$ALPINE_DEPS p7zip" ;;
+                "icoutils") ALPINE_DEPS="$ALPINE_DEPS icoutils" ;;
+                "imagemagick") ALPINE_DEPS="$ALPINE_DEPS imagemagick" ;;
+                "wget") ALPINE_DEPS="$ALPINE_DEPS wget" ;;
+                *) ALPINE_DEPS="$ALPINE_DEPS $dep" ;;
+            esac
+        done
+        # shellcheck disable=SC2086
+        if ! sudo apk add $ALPINE_DEPS; then
+            echo "❌ Failed to install dependencies using 'sudo apk add'."
+            exit 1
+        fi
     else
-        echo "❌ Neither dnf nor apt package manager found. Please install dependencies manually: $DEPS_TO_INSTALL"
+        echo "❌ No supported package manager found (dnf, yum, apt, zypper, pacman, apk)."
+        echo "Please install dependencies manually: $DEPS_TO_INSTALL"
+        echo "Required commands: 7z, wget, wrestool, icotool, convert"
         exit 1
     fi
     echo "✓ System dependencies installed successfully via sudo."
@@ -366,7 +461,19 @@ echo "✓ Download complete: $CLAUDE_EXE_FILENAME"
 echo "📦 Extracting resources from $CLAUDE_EXE_FILENAME into separate directory..."
 CLAUDE_EXTRACT_DIR="$WORK_DIR/claude-extract"
 mkdir -p "$CLAUDE_EXTRACT_DIR"
-if ! 7z x -y "$CLAUDE_EXE_PATH" -o"$CLAUDE_EXTRACT_DIR"; then     echo "❌ Failed to extract installer"
+# Find available 7z command (7z, 7za, or 7zr)
+SEVENZ_CMD=""
+if command -v 7z &> /dev/null; then
+    SEVENZ_CMD="7z"
+elif command -v 7za &> /dev/null; then
+    SEVENZ_CMD="7za"
+elif command -v 7zr &> /dev/null; then
+    SEVENZ_CMD="7zr"
+else
+    echo "❌ No 7-zip command found (7z, 7za, or 7zr)"
+    exit 1
+fi
+if ! "$SEVENZ_CMD" x -y "$CLAUDE_EXE_PATH" -o"$CLAUDE_EXTRACT_DIR"; then     echo "❌ Failed to extract installer"
     cd "$PROJECT_ROOT" && exit 1
 fi
 
@@ -385,7 +492,7 @@ if [ -z "$VERSION" ]; then
 fi
 echo "✓ Detected Claude version: $VERSION"
 
-if ! 7z x -y "$NUPKG_PATH_RELATIVE"; then     echo "❌ Failed to extract nupkg"
+if ! "$SEVENZ_CMD" x -y "$NUPKG_PATH_RELATIVE"; then     echo "❌ Failed to extract nupkg"
     cd "$PROJECT_ROOT" && exit 1
 fi
 echo "✓ Resources extracted from nupkg"
@@ -497,27 +604,7 @@ cd "$PROJECT_ROOT"
 
 echo -e "\033[1;36m--- Call Packaging Script ---\033[0m"
 FINAL_OUTPUT_PATH="" FINAL_DESKTOP_FILE_PATH="" 
-if [ "$BUILD_FORMAT" = "deb" ]; then
-    echo "📦 Calling Debian packaging script for $ARCHITECTURE..."
-    chmod +x scripts/build-deb-package.sh
-    if ! scripts/build-deb-package.sh \
-        "$VERSION" "$ARCHITECTURE" "$WORK_DIR" "$APP_STAGING_DIR" \
-        "$PACKAGE_NAME" "$MAINTAINER" "$DESCRIPTION"; then
-        echo "❌ Debian packaging script failed."
-        exit 1
-    fi
-    DEB_FILE=$(find "$WORK_DIR" -maxdepth 1 -name "${PACKAGE_NAME}_${VERSION}_${ARCHITECTURE}.deb" | head -n 1)
-    echo "✓ Debian Build complete!"
-    if [ -n "$DEB_FILE" ] && [ -f "$DEB_FILE" ]; then
-        FINAL_OUTPUT_PATH="./$(basename "$DEB_FILE")" # Set final path using basename directly
-        mv "$DEB_FILE" "$FINAL_OUTPUT_PATH"
-        echo "Package created at: $FINAL_OUTPUT_PATH"
-    else
-        echo "Warning: Could not determine final .deb file path from $WORK_DIR for ${ARCHITECTURE}."
-        FINAL_OUTPUT_PATH="Not Found"
-    fi
-
-elif [ "$BUILD_FORMAT" = "appimage" ]; then
+if [ "$BUILD_FORMAT" = "appimage" ]; then
     echo "📦 Calling AppImage packaging script for $ARCHITECTURE..."
     chmod +x scripts/build-appimage.sh
     if ! scripts/build-appimage.sh \
@@ -573,15 +660,7 @@ fi
 echo "✅ Build process finished."
 
 echo -e "\n\033[1;34m====== Next Steps ======\033[0m"
-if [ "$BUILD_FORMAT" = "deb" ]; then
-    if [ "$FINAL_OUTPUT_PATH" != "Not Found" ] && [ -e "$FINAL_OUTPUT_PATH" ]; then
-        echo -e "📦 To install the Debian package, run:"
-        echo -e "   \033[1;32msudo apt install $FINAL_OUTPUT_PATH\033[0m"
-        echo -e "   (or \`sudo dpkg -i $FINAL_OUTPUT_PATH\`)"
-    else
-        echo -e "⚠️ Debian package file not found. Cannot provide installation instructions."
-    fi
-elif [ "$BUILD_FORMAT" = "appimage" ]; then
+if [ "$BUILD_FORMAT" = "appimage" ]; then
     if [ "$FINAL_OUTPUT_PATH" != "Not Found" ] && [ -e "$FINAL_OUTPUT_PATH" ]; then
         echo -e "✅ AppImage created at: \033[1;36m$FINAL_OUTPUT_PATH\033[0m"
         

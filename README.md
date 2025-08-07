@@ -1,6 +1,6 @@
 # Claude Desktop for Linux
 
-This project provides build scripts to run Claude Desktop natively on Linux systems. It repackages the official Windows application for Debian-based distributions, producing either `.deb` packages or AppImages.
+This project provides universal build scripts to run Claude Desktop natively on any Linux distribution. It repackages the official Windows application into a Linux-compatible portable AppImage.
 
 **Note:** This is an unofficial build script. For official support, please visit [Anthropic's website](https://www.anthropic.com). For issues with the build script or Linux implementation, please [open an issue](https://github.com/aaddrick/claude-desktop-debian/issues) in this repository.
 
@@ -26,15 +26,26 @@ This project provides build scripts to run Claude Desktop natively on Linux syst
 
 ### Using Pre-built Releases
 
-Download the latest `.deb` or `.AppImage` from the [Releases page](https://github.com/aaddrick/claude-desktop-debian/releases).
+Download the latest `.AppImage` from the [Releases page](https://github.com/aaddrick/claude-desktop-debian/releases).
 
 ### Building from Source
 
 #### Prerequisites
 
-- Debian-based Linux distribution (Debian, Ubuntu, Linux Mint, MX Linux, etc.)
+- Any modern Linux distribution
 - Git
 - Basic build tools (automatically installed by the script)
+
+### Supported Distributions
+
+The build script automatically detects and supports the following package managers:
+- **DNF/YUM**: Fedora, RHEL, CentOS, Rocky Linux, AlmaLinux
+- **APT**: Debian, Ubuntu, Linux Mint, Pop!_OS, Elementary OS
+- **Zypper**: openSUSE, SUSE Linux Enterprise
+- **Pacman**: Arch Linux, Manjaro, EndeavourOS
+- **APK**: Alpine Linux
+
+The script has been tested on Fedora 40+ and should work on any distribution with one of the above package managers.
 
 #### Build Instructions
 
@@ -43,38 +54,20 @@ Download the latest `.deb` or `.AppImage` from the [Releases page](https://githu
 git clone https://github.com/aaddrick/claude-desktop-debian.git
 cd claude-desktop-debian
 
-# Build a .deb package (default)
+# Build an AppImage
 ./build.sh
 
-# Build an AppImage
-./build.sh --build appimage
-
 # Build with custom options
-./build.sh --build deb --clean no  # Keep intermediate files
+./build.sh --clean no  # Keep intermediate files
 ```
+
+**Note**: The script will automatically detect your distribution and install required dependencies using your system's package manager.
 
 #### Installing the Built Package
 
-**For .deb packages:**
-```bash
-sudo dpkg -i ./claude-desktop_VERSION_ARCHITECTURE.deb
-
-# If you encounter dependency issues:
-sudo apt --fix-broken install
-```
-
 **For AppImages:**
-```bash
-# Make executable
-chmod +x ./claude-desktop-*.AppImage
 
-# Run directly
-./claude-desktop-*.AppImage
-
-# Or integrate with your system using AppImageLauncher
-```
-
-**Note:** AppImage login requires proper desktop integration. Use [AppImageLauncher](https://github.com/TheAssassin/AppImageLauncher) or manually install the provided `.desktop` file to `~/.local/share/applications/`.
+**Note:** AppImage login requires proper desktop integration. Use [AppImageLauncher](https://github.com/TheAssassin/AppImageLauncher) or manually install the provided `.desktop` file to `~/.local/share/applications/.`
 
 ## Configuration
 
@@ -94,7 +87,7 @@ $HOME/claude-desktop-launcher.log
 
 ## Uninstallation
 
-**For .deb packages:**
+
 ```bash
 # Remove package
 sudo dpkg -r claude-desktop
@@ -128,9 +121,7 @@ This allows the application to save display settings properly.
 
 AppImages run with `--no-sandbox` due to electron's chrome-sandbox requiring root privileges for unprivileged namespace creation. This is a known limitation of AppImage format with Electron applications.
 
-For enhanced security, consider:
-- Using the .deb package instead
-- Running the AppImage within a separate sandbox (e.g., bubblewrap)
+For enhanced security, consider running the AppImage within a separate sandbox (e.g., bubblewrap)
 
 ## Technical Details
 
@@ -148,15 +139,50 @@ Claude Desktop is an Electron application distributed for Windows. This project:
 ### Build Process
 
 The build script (`build.sh`) handles:
-- Dependency checking and installation
-- Resource extraction from Windows installer
+- Automatic distribution detection and package manager identification
+- Dependency installation via dnf, yum, apt, zypper, pacman, or apk
+- Resource extraction from Windows installer (using 7-zip)
 - Icon processing for Linux desktop standards
-- Native module replacement
-- Package generation based on selected format
+- Native module replacement for Linux compatibility
+- Package generation (`.AppImage`)
+- Architecture detection (x86_64/amd64 and arm64)
+
+### Dependencies
+
+The script automatically installs these dependencies based on your distribution:
+- **7-zip**: For extracting Windows installer files
+- **wget**: For downloading the Claude installer
+- **icoutils**: For extracting and converting icons (wrestool, icotool)
+- **ImageMagick**: For image processing (convert command)
+- **Node.js 20+**: Automatically downloaded if not present or outdated
 
 ### Updating for New Releases
 
 The script automatically detects system architecture and downloads the appropriate version. If Claude Desktop's download URLs change, update the `CLAUDE_DOWNLOAD_URL` variables in `build.sh`.
+
+## Platform Support
+
+### Tested Distributions
+- Fedora 40+
+- Ubuntu 22.04+
+- Debian 12+
+- Arch Linux
+- openSUSE Tumbleweed
+
+### Package Manager Compatibility
+The build script automatically detects and uses:
+1. **dnf** (Fedora, RHEL 8+, Rocky, AlmaLinux)
+2. **yum** (older RHEL, CentOS)
+3. **apt** (Debian, Ubuntu, Mint)
+4. **zypper** (openSUSE, SUSE)
+5. **pacman** (Arch, Manjaro)
+6. **apk** (Alpine)
+
+If your distribution uses a different package manager, you can manually install the required tools:
+- 7z (or 7za, 7zr)
+- wget
+- wrestool and icotool (usually in icoutils package)
+- convert (usually in ImageMagick package)
 
 ## Acknowledgments
 

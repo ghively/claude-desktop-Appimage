@@ -1,6 +1,10 @@
 #!/bin/bash
 set -e
 
+# AppImage build script for Claude Desktop
+# Creates a portable AppImage that works on any Linux distribution
+# No installation required - just make executable and run
+
 # Arguments passed from the main script
 VERSION="$1"
 ARCHITECTURE="$2"
