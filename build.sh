@@ -4,12 +4,17 @@ set -euo pipefail
 # --- Architecture Detection ---
 echo -e "\033[1;36m--- Architecture Detection ---\033[0m"
 echo "⚙️ Detecting system architecture..."
-HOST_ARCH=$(dpkg --print-architecture)
+HOST_ARCH=$(uname -m)
 echo "Detected host architecture: $HOST_ARCH"
-cat /etc/os-release && uname -m && dpkg --print-architecture
+cat /etc/os-release && uname -m
 
 # Set variables based on detected architecture
-if [ "$HOST_ARCH" = "amd64" ]; then
+if [ "$HOST_ARCH" = "x86_64" ]; then
+    CLAUDE_DOWNLOAD_URL="https://storage.googleapis.com/osprey-downloads-c02f6a0d-347c-492b-a752-3e0651722e97/nest-win-x64/Claude-Setup-x64.exe"
+    ARCHITECTURE="amd64"
+    CLAUDE_EXE_FILENAME="Claude-Setup-x64.exe"
+    echo "Configured for amd64 build."
+elif [ "$HOST_ARCH" = "amd64" ]; then
     CLAUDE_DOWNLOAD_URL="https://storage.googleapis.com/osprey-downloads-c02f6a0d-347c-492b-a752-3e0651722e97/nest-win-x64/Claude-Setup-x64.exe"
     ARCHITECTURE="amd64"
     CLAUDE_EXE_FILENAME="Claude-Setup-x64.exe"
@@ -27,10 +32,7 @@ echo "Target Architecture (detected): $ARCHITECTURE" # Renamed echo
 echo -e "\033[1;36m--- End Architecture Detection ---\033[0m"
 
 
-if [ ! -f "/etc/debian_version" ]; then
-    echo "❌ This script requires a Debian-based Linux distribution"
-    exit 1
-fi
+
 
 if [ "$EUID" -eq 0 ]; then
    echo "❌ This script should not be run using sudo or as the root user."
@@ -73,7 +75,7 @@ fi # End of if [ -d "$ORIGINAL_HOME/.nvm" ] check
 
 echo "System Information:"
 echo "Distribution: $(grep "PRETTY_NAME" /etc/os-release | cut -d'"' -f2)"
-echo "Debian version: $(cat /etc/debian_version)"
+
 echo "Target Architecture: $ARCHITECTURE" 
 PACKAGE_NAME="claude-desktop"
 MAINTAINER="Claude Desktop Linux Maintainers"
@@ -155,8 +157,8 @@ check_command() {
 
 echo "Checking dependencies..."
 DEPS_TO_INSTALL=""
-COMMON_DEPS="p7zip wget wrestool icotool convert"
-DEB_DEPS="dpkg-deb"
+COMMON_DEPS="7z wget wrestool icotool convert"
+DEB_DEPS=""
 APPIMAGE_DEPS="" 
 ALL_DEPS_TO_CHECK="$COMMON_DEPS"
 if [ "$BUILD_FORMAT" = "deb" ]; then
@@ -172,7 +174,7 @@ for cmd in $ALL_DEPS_TO_CHECK; do
             "wget") DEPS_TO_INSTALL="$DEPS_TO_INSTALL wget" ;;
             "wrestool"|"icotool") DEPS_TO_INSTALL="$DEPS_TO_INSTALL icoutils" ;;
             "convert") DEPS_TO_INSTALL="$DEPS_TO_INSTALL imagemagick" ;;
-            "dpkg-deb") DEPS_TO_INSTALL="$DEPS_TO_INSTALL dpkg-dev" ;;
+            
         esac
     fi
 done
@@ -184,15 +186,29 @@ if [ -n "$DEPS_TO_INSTALL" ]; then
         echo "❌ Failed to validate sudo credentials. Please ensure you can run sudo."
         exit 1
     fi
+        # Attempt to install using dnf for Fedora/RHEL-based systems
+    if command -v dnf &> /dev/null; then
+        echo "Attempting to install dependencies using dnf..."
+        if ! sudo dnf install -y $DEPS_TO_INSTALL; then
+            echo "❌ Failed to install dependencies using 'sudo dnf install'."
+            exit 1
+        fi
+    # Fallback to apt for Debian/Ubuntu-based systems
+    elif command -v apt &> /dev/null; then
+        echo "Attempting to install dependencies using apt..."
         if ! sudo apt update; then
-        echo "❌ Failed to run 'sudo apt update'."
+            echo "❌ Failed to run 'sudo apt update'."
+            exit 1
+        fi
+        # Here on purpose no "" to expand the 'list', thus
+        # shellcheck disable=SC2086
+        if ! sudo apt install -y $DEPS_TO_INSTALL; then
+            echo "❌ Failed to install dependencies using 'sudo apt install'."
+            exit 1
+        fi
+    else
+        echo "❌ Neither dnf nor apt package manager found. Please install dependencies manually: $DEPS_TO_INSTALL"
         exit 1
-    fi
-    # Here on purpose no "" to expand the 'list', thus
-    # shellcheck disable=SC2086
-    if ! sudo apt install -y $DEPS_TO_INSTALL; then
-         echo "❌ Failed to install dependencies using 'sudo apt install'."
-         exit 1
     fi
     echo "✓ System dependencies installed successfully via sudo."
 fi
@@ -568,17 +584,7 @@ if [ "$BUILD_FORMAT" = "deb" ]; then
 elif [ "$BUILD_FORMAT" = "appimage" ]; then
     if [ "$FINAL_OUTPUT_PATH" != "Not Found" ] && [ -e "$FINAL_OUTPUT_PATH" ]; then
         echo -e "✅ AppImage created at: \033[1;36m$FINAL_OUTPUT_PATH\033[0m"
-        echo -e "\n\033[1;33mIMPORTANT:\033[0m This AppImage requires \033[1;36mAppImageLauncher\033[0m for proper desktop integration"
-        echo -e "and to handle the \`claude://\` login process correctly."
-        echo -e "\n🚀 To install AppImageLauncher (v2.2.0 for amd64):"
-        echo -e "   1. Download:"
-        echo -e "      \033[1;32mwget https://github.com/TheAssassin/AppImageLauncher/releases/download/v2.2.0/appimagelauncher_2.2.0-travis995.0f91801.bionic_amd64.deb -O /tmp/appimagelauncher.deb\033[0m"
-        echo -e "       - or appropriate package from here: \033[1;34mhttps://github.com/TheAssassin/AppImageLauncher/releases/latest\033[0m"
-        echo -e "   2. Install the package:"
-        echo -e "      \033[1;32msudo dpkg -i /tmp/appimagelauncher.deb\033[0m"
-        echo -e "   3. Fix any missing dependencies:"
-        echo -e "      \033[1;32msudo apt --fix-broken install\033[0m"
-        echo -e "\n   After installation, simply double-click \033[1;36m$FINAL_OUTPUT_PATH\033[0m and choose 'Integrate and run'."
+        
     else
         echo -e "⚠️ AppImage file not found. Cannot provide usage instructions."
     fi
