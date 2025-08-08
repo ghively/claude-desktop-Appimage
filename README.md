@@ -2,7 +2,7 @@
 
 This project provides a universal build script to run Claude Desktop natively on any Linux distribution. It repackages the official Windows application into a Linux-compatible portable AppImage.
 
-**Note:** This is an unofficial build script. For official support, please visit [Anthropic's website](https://www.anthropic.com). For issues with the build script or Linux implementation, please [open an issue](https://github.com/aaddrick/claude-desktop-debian/issues) in this repository.
+**Note:** This is an unofficial build script. For official support, please visit [Anthropic's website](https://www.anthropic.com).
 
 ## Features
 
@@ -23,10 +23,6 @@ This project provides a universal build script to run Claude Desktop natively on
 ![System tray menu on KDE](https://github.com/user-attachments/assets/ba209824-8afb-437c-a944-b53fd9ecd559)
 
 ## Installation
-
-### Using Pre-built Releases
-
-Download the latest `.AppImage` from the [Releases page](https://github.com/aaddrick/claude-desktop-debian/releases).
 
 ### Building from Source
 
@@ -204,16 +200,6 @@ If your distribution uses a different package manager, you can manually install 
 - wrestool and icotool (usually in icoutils package)
 - convert (usually in ImageMagick package)
 
-## Acknowledgments
-
-This project was inspired by [k3d3's claude-desktop-linux-flake](https://github.com/k3d3/claude-desktop-linux-flake) and their [Reddit post](https://www.reddit.com/r/ClaudeAI/comments/1hgsmpq/i_successfully_ran_claude_desktop_natively_on/) about running Claude Desktop natively on Linux.
-
-Special thanks to:
-- **k3d3** for the original NixOS implementation and native bindings insights
-- **[emsi](https://github.com/emsi/claude-desktop)** for the title bar fix and alternative implementation approach
-
-For NixOS users, please refer to [k3d3's repository](https://github.com/k3d3/claude-desktop-linux-flake) for a Nix-specific implementation.
-
 ## License
 
 The build scripts in this repository are dual-licensed under:
@@ -234,5 +220,4 @@ Contributions are welcome! By submitting a contribution, you agree to license it
 
 ### Reporting Issues
 
-- For build script issues: [Open an issue here](https://github.com/aaddrick/claude-desktop-debian/issues)
 - For Claude Desktop functionality issues: Contact [Anthropic support](https://www.anthropic.com)
